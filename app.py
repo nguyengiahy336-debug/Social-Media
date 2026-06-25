@@ -1,30 +1,39 @@
 import os
-import sqlite3
 import uuid
-from datetime import datetime
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify, g, send_from_directory
-from werkzeug.utils import secure_filename
+from datetime import datetime, timezone
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "win95social.db")
-UPLOAD_FOLDER = os.path.join(BASE_DIR, "static", "uploads")
+import psycopg2
+import psycopg2.extras
+import cloudinary
+import cloudinary.uploader
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, g
+
 ALLOWED_IMAGE = {"png", "jpg", "jpeg", "gif", "webp", "bmp"}
 ALLOWED_VIDEO = {"mp4", "webm", "mov", "avi"}
 
 app = Flask(__name__)
-app.secret_key = "win95social-dev-secret-change-me"
-app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+app.secret_key = os.environ.get("SECRET_KEY", "win95social-dev-secret-change-me")
 app.config["MAX_CONTENT_LENGTH"] = 200 * 1024 * 1024  # 200 MB max upload
 
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+# ---------- Cloudinary config (reads from environment variables) ----------
+cloudinary.config(
+    cloud_name=os.environ.get("CLOUDINARY_CLOUD_NAME"),
+    api_key=os.environ.get("CLOUDINARY_API_KEY"),
+    api_secret=os.environ.get("CLOUDINARY_API_SECRET"),
+    secure=True,
+)
+
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
+# Render gives URLs starting with postgres://, psycopg2 wants postgresql://
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 
 # ---------- Database helpers ----------
 
 def get_db():
     if "db" not in g:
-        g.db = sqlite3.connect(DB_PATH)
-        g.db.row_factory = sqlite3.Row
+        g.db = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
     return g.db
 
 
@@ -35,65 +44,63 @@ def close_db(exception=None):
         db.close()
 
 
+def now_iso():
+    return datetime.now(timezone.utc).isoformat()
+
+
 def init_db():
-    db = sqlite3.connect(DB_PATH)
-    db.row_factory = sqlite3.Row
-    db.execute("""
+    db = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = db.cursor()
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             username TEXT UNIQUE NOT NULL,
             bio TEXT DEFAULT '',
             created_at TEXT NOT NULL
         )
     """)
-    db.execute("""
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS communities (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             name TEXT UNIQUE NOT NULL,
             description TEXT DEFAULT '',
-            icon TEXT DEFAULT '02_computer-4.png',
             created_at TEXT NOT NULL
         )
     """)
-    db.execute("""
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS posts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            community_id INTEGER NOT NULL,
-            user_id INTEGER NOT NULL,
-            post_type TEXT NOT NULL,  -- text, image, video
+            id SERIAL PRIMARY KEY,
+            community_id INTEGER NOT NULL REFERENCES communities (id),
+            user_id INTEGER NOT NULL REFERENCES users (id),
+            post_type TEXT NOT NULL,
             title TEXT DEFAULT '',
             body TEXT DEFAULT '',
             media_path TEXT DEFAULT '',
-            created_at TEXT NOT NULL,
-            FOREIGN KEY (community_id) REFERENCES communities (id),
-            FOREIGN KEY (user_id) REFERENCES users (id)
+            created_at TEXT NOT NULL
         )
     """)
-    db.execute("""
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS comments (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            post_id INTEGER NOT NULL,
-            user_id INTEGER NOT NULL,
+            id SERIAL PRIMARY KEY,
+            post_id INTEGER NOT NULL REFERENCES posts (id),
+            user_id INTEGER NOT NULL REFERENCES users (id),
             body TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            FOREIGN KEY (post_id) REFERENCES posts (id),
-            FOREIGN KEY (user_id) REFERENCES users (id)
+            created_at TEXT NOT NULL
         )
     """)
-    db.execute("""
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS likes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            post_id INTEGER NOT NULL,
-            user_id INTEGER NOT NULL,
+            id SERIAL PRIMARY KEY,
+            post_id INTEGER NOT NULL REFERENCES posts (id),
+            user_id INTEGER NOT NULL REFERENCES users (id),
             created_at TEXT NOT NULL,
-            UNIQUE(post_id, user_id),
-            FOREIGN KEY (post_id) REFERENCES posts (id),
-            FOREIGN KEY (user_id) REFERENCES users (id)
+            UNIQUE(post_id, user_id)
         )
     """)
+    db.commit()
 
-    # Seed some starter communities if none exist
-    existing = db.execute("SELECT COUNT(*) as c FROM communities").fetchone()
+    cur.execute("SELECT COUNT(*) as c FROM communities")
+    existing = cur.fetchone()
     if existing["c"] == 0:
         starter_communities = [
             ("r/RetroTech", "Old computers, ThinkPads, and nostalgia hardware"),
@@ -102,14 +109,15 @@ def init_db():
             ("r/Memes", "Just memes, no rules"),
             ("r/Crafts", "Papercraft, soldering, DIY projects"),
         ]
-        now = datetime.utcnow().isoformat()
+        now = now_iso()
         for name, desc in starter_communities:
-            db.execute(
-                "INSERT INTO communities (name, description, created_at) VALUES (?, ?, ?)",
+            cur.execute(
+                "INSERT INTO communities (name, description, created_at) VALUES (%s, %s, %s)",
                 (name, desc, now),
             )
         db.commit()
 
+    cur.close()
     db.close()
 
 
@@ -119,7 +127,9 @@ def current_user():
     if "user_id" not in session:
         return None
     db = get_db()
-    return db.execute("SELECT * FROM users WHERE id = ?", (session["user_id"],)).fetchone()
+    cur = db.cursor()
+    cur.execute("SELECT * FROM users WHERE id = %s", (session["user_id"],))
+    return cur.fetchone()
 
 
 def login_required_redirect():
@@ -144,15 +154,16 @@ def login():
             return render_template("login.html", error="Username too long (max 20 chars).")
 
         db = get_db()
-        user = db.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+        cur = db.cursor()
+        cur.execute("SELECT * FROM users WHERE username = %s", (username,))
+        user = cur.fetchone()
         if user is None:
-            now = datetime.utcnow().isoformat()
-            db.execute(
-                "INSERT INTO users (username, created_at) VALUES (?, ?)",
-                (username, now),
+            cur.execute(
+                "INSERT INTO users (username, created_at) VALUES (%s, %s) RETURNING *",
+                (username, now_iso()),
             )
+            user = cur.fetchone()
             db.commit()
-            user = db.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
 
         session["user_id"] = user["id"]
         return redirect(url_for("communities"))
@@ -181,13 +192,15 @@ def communities():
     if redir:
         return redir
     db = get_db()
-    comms = db.execute("""
+    cur = db.cursor()
+    cur.execute("""
         SELECT c.*, COUNT(p.id) as post_count
         FROM communities c
         LEFT JOIN posts p ON p.community_id = c.id
         GROUP BY c.id
         ORDER BY c.name ASC
-    """).fetchall()
+    """)
+    comms = cur.fetchall()
     return render_template("communities.html", communities=comms, user=current_user())
 
 
@@ -203,14 +216,15 @@ def new_community():
     if not name.startswith("r/"):
         name = "r/" + name
     db = get_db()
+    cur = db.cursor()
     try:
-        db.execute(
-            "INSERT INTO communities (name, description, created_at) VALUES (?, ?, ?)",
-            (name, desc, datetime.utcnow().isoformat()),
+        cur.execute(
+            "INSERT INTO communities (name, description, created_at) VALUES (%s, %s, %s)",
+            (name, desc, now_iso()),
         )
         db.commit()
-    except sqlite3.IntegrityError:
-        pass  # community already exists, ignore
+    except psycopg2.IntegrityError:
+        db.rollback()  # community already exists, ignore
     return redirect(url_for("communities"))
 
 
@@ -222,7 +236,9 @@ def feed(community_id):
     if redir:
         return redir
     db = get_db()
-    community = db.execute("SELECT * FROM communities WHERE id = ?", (community_id,)).fetchone()
+    cur = db.cursor()
+    cur.execute("SELECT * FROM communities WHERE id = %s", (community_id,))
+    community = cur.fetchone()
     if community is None:
         return redirect(url_for("communities"))
     return render_template("feed.html", community=community, user=current_user())
@@ -234,20 +250,24 @@ def api_posts(community_id):
     if redir:
         return jsonify({"error": "not logged in"}), 401
     db = get_db()
+    cur = db.cursor()
     uid = session["user_id"]
-    rows = db.execute("""
+    cur.execute("""
         SELECT p.*, u.username,
             (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id) as like_count,
             (SELECT COUNT(*) FROM comments cm WHERE cm.post_id = p.id) as comment_count,
-            (SELECT COUNT(*) FROM likes l2 WHERE l2.post_id = p.id AND l2.user_id = ?) as liked_by_me
+            (SELECT COUNT(*) FROM likes l2 WHERE l2.post_id = p.id AND l2.user_id = %s) as liked_by_me
         FROM posts p
         JOIN users u ON u.id = p.user_id
-        WHERE p.community_id = ?
+        WHERE p.community_id = %s
         ORDER BY p.created_at DESC
-    """, (uid, community_id)).fetchall()
+    """, (uid, community_id))
+    rows = cur.fetchall()
     posts = [dict(r) for r in rows]
     for p in posts:
         p["liked_by_me"] = bool(p["liked_by_me"])
+        p["like_count"] = int(p["like_count"])
+        p["comment_count"] = int(p["comment_count"])
     return jsonify(posts)
 
 
@@ -259,7 +279,9 @@ def new_post(community_id):
     if redir:
         return redir
     db = get_db()
-    community = db.execute("SELECT * FROM communities WHERE id = ?", (community_id,)).fetchone()
+    cur = db.cursor()
+    cur.execute("SELECT * FROM communities WHERE id = %s", (community_id,))
+    community = cur.fetchone()
     if community is None:
         return redirect(url_for("communities"))
 
@@ -274,11 +296,17 @@ def new_post(community_id):
             if file and file.filename:
                 allowed = ALLOWED_IMAGE if post_type == "image" else ALLOWED_VIDEO
                 if allowed_file(file.filename, allowed):
-                    ext = file.filename.rsplit(".", 1)[1].lower()
-                    new_name = f"{uuid.uuid4().hex}.{ext}"
-                    filepath = os.path.join(app.config["UPLOAD_FOLDER"], new_name)
-                    file.save(filepath)
-                    media_path = new_name
+                    try:
+                        resource_type = "image" if post_type == "image" else "video"
+                        upload_result = cloudinary.uploader.upload(
+                            file,
+                            resource_type=resource_type,
+                            public_id=f"win95social/{uuid.uuid4().hex}",
+                        )
+                        media_path = upload_result["secure_url"]
+                    except Exception as e:
+                        return render_template("new_post.html", community=community, user=current_user(),
+                                                error=f"Upload failed: {e}")
                 else:
                     return render_template("new_post.html", community=community, user=current_user(),
                                             error="That file type isn't allowed for this post type.")
@@ -290,10 +318,10 @@ def new_post(community_id):
             return render_template("new_post.html", community=community, user=current_user(),
                                     error="Post can't be totally empty.")
 
-        db.execute("""
+        cur.execute("""
             INSERT INTO posts (community_id, user_id, post_type, title, body, media_path, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (community_id, session["user_id"], post_type, title, body, media_path, datetime.utcnow().isoformat()))
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, (community_id, session["user_id"], post_type, title, body, media_path, now_iso()))
         db.commit()
         return redirect(url_for("feed", community_id=community_id))
 
@@ -307,18 +335,21 @@ def api_like(post_id):
     if "user_id" not in session:
         return jsonify({"error": "not logged in"}), 401
     db = get_db()
+    cur = db.cursor()
     uid = session["user_id"]
-    existing = db.execute("SELECT * FROM likes WHERE post_id = ? AND user_id = ?", (post_id, uid)).fetchone()
+    cur.execute("SELECT * FROM likes WHERE post_id = %s AND user_id = %s", (post_id, uid))
+    existing = cur.fetchone()
     if existing:
-        db.execute("DELETE FROM likes WHERE id = ?", (existing["id"],))
+        cur.execute("DELETE FROM likes WHERE id = %s", (existing["id"],))
         db.commit()
         liked = False
     else:
-        db.execute("INSERT INTO likes (post_id, user_id, created_at) VALUES (?, ?, ?)",
-                   (post_id, uid, datetime.utcnow().isoformat()))
+        cur.execute("INSERT INTO likes (post_id, user_id, created_at) VALUES (%s, %s, %s)",
+                     (post_id, uid, now_iso()))
         db.commit()
         liked = True
-    count = db.execute("SELECT COUNT(*) as c FROM likes WHERE post_id = ?", (post_id,)).fetchone()["c"]
+    cur.execute("SELECT COUNT(*) as c FROM likes WHERE post_id = %s", (post_id,))
+    count = cur.fetchone()["c"]
     return jsonify({"liked": liked, "like_count": count})
 
 
@@ -329,13 +360,15 @@ def api_get_comments(post_id):
     if "user_id" not in session:
         return jsonify({"error": "not logged in"}), 401
     db = get_db()
-    rows = db.execute("""
+    cur = db.cursor()
+    cur.execute("""
         SELECT cm.*, u.username
         FROM comments cm
         JOIN users u ON u.id = cm.user_id
-        WHERE cm.post_id = ?
+        WHERE cm.post_id = %s
         ORDER BY cm.created_at ASC
-    """, (post_id,)).fetchall()
+    """, (post_id,))
+    rows = cur.fetchall()
     return jsonify([dict(r) for r in rows])
 
 
@@ -348,11 +381,13 @@ def api_post_comment(post_id):
     if not body:
         return jsonify({"error": "empty comment"}), 400
     db = get_db()
+    cur = db.cursor()
     uid = session["user_id"]
-    db.execute("INSERT INTO comments (post_id, user_id, body, created_at) VALUES (?, ?, ?, ?)",
-               (post_id, uid, body, datetime.utcnow().isoformat()))
+    cur.execute("INSERT INTO comments (post_id, user_id, body, created_at) VALUES (%s, %s, %s, %s)",
+                (post_id, uid, body, now_iso()))
     db.commit()
-    count = db.execute("SELECT COUNT(*) as c FROM comments WHERE post_id = ?", (post_id,)).fetchone()["c"]
+    cur.execute("SELECT COUNT(*) as c FROM comments WHERE post_id = %s", (post_id,))
+    count = cur.fetchone()["c"]
     return jsonify({"ok": True, "comment_count": count})
 
 
@@ -364,18 +399,21 @@ def profile(username):
     if redir:
         return redir
     db = get_db()
-    profile_user = db.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+    cur = db.cursor()
+    cur.execute("SELECT * FROM users WHERE username = %s", (username,))
+    profile_user = cur.fetchone()
     if profile_user is None:
         return redirect(url_for("communities"))
-    posts = db.execute("""
+    cur.execute("""
         SELECT p.*, c.name as community_name,
             (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id) as like_count,
             (SELECT COUNT(*) FROM comments cm WHERE cm.post_id = p.id) as comment_count
         FROM posts p
         JOIN communities c ON c.id = p.community_id
-        WHERE p.user_id = ?
+        WHERE p.user_id = %s
         ORDER BY p.created_at DESC
-    """, (profile_user["id"],)).fetchall()
+    """, (profile_user["id"],))
+    posts = cur.fetchall()
     return render_template("profile.html", profile_user=profile_user, posts=posts, user=current_user())
 
 
@@ -384,16 +422,20 @@ def update_bio(username):
     if "user_id" not in session:
         return jsonify({"error": "not logged in"}), 401
     db = get_db()
+    cur = db.cursor()
     me = current_user()
     if me["username"] != username:
         return jsonify({"error": "not your profile"}), 403
     data = request.get_json(silent=True) or {}
     bio = (data.get("bio") or "").strip()[:280]
-    db.execute("UPDATE users SET bio = ? WHERE id = ?", (bio, me["id"]))
+    cur.execute("UPDATE users SET bio = %s WHERE id = %s", (bio, me["id"]))
     db.commit()
     return jsonify({"ok": True, "bio": bio})
 
 
+# Initialize DB tables on startup (safe to call every boot, uses IF NOT EXISTS)
+init_db()
+
+
 if __name__ == "__main__":
-    init_db()
     app.run(debug=True, port=5000)

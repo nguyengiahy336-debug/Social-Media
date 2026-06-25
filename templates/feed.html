@@ -77,9 +77,9 @@ function timeAgo(isoString) {
 function renderPostCard(post) {
   let mediaHtml = '';
   if (post.post_type === 'image' && post.media_path) {
-    mediaHtml = `<div class="feed-card-media"><img src="/static/uploads/${post.media_path}" alt="post image"></div>`;
+    mediaHtml = `<div class="feed-card-media"><img src="${post.media_path}" alt="post image"></div>`;
   } else if (post.post_type === 'video' && post.media_path) {
-    mediaHtml = `<div class="feed-card-media"><video src="/static/uploads/${post.media_path}" controls playsinline></video></div>`;
+    mediaHtml = `<div class="feed-card-media"><video src="${post.media_path}" controls playsinline></video></div>`;
   }
 
   let textHtml = '';
