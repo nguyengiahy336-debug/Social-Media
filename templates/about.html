@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}About - Win95Social{% endblock %}
+{% block content %}
+<div class="win95-window" style="max-width: 480px;">
+  <div class="win95-titlebar">
+    <div class="title-left">
+      <span class="title-icon"></span>
+      <span>About Win95Social</span>
+    </div>
+    <div class="win95-titlebar-btns">
+      <button disabled>_</button>
+      <button disabled>&#9633;</button>
+      <button onclick="window.history.back()">X</button>
+    </div>
+  </div>
+  <div class="win95-body">
+    <p class="text-bold">What is this?</p>
+    <p class="text-sm">
+      Win95Social is a fan-made, personal hobby project — a social media site styled after the
+      look of Windows 95. It's not affiliated with, endorsed by, or made by Microsoft in any way.
+      "Windows 95" and related trademarks belong to Microsoft Corporation; this site just borrows
+      the visual style for fun, nostalgia, and a laugh.
+    </p>
+
+    <hr class="win95">
+
+    <p class="text-bold">Who made it?</p>
+    <p class="text-sm">
+      This is an independent, non-commercial personal project. No data here is sold, shared with
+      advertisers, or used for anything beyond running this site.
+    </p>
+
+    <hr class="win95">
+
+    <p class="text-bold">Is my data safe?</p>
+    <p class="text-sm">
+      Passwords are stored securely (hashed, never in plain text). That said, this is still a small
+      hobby project, not an enterprise platform — don't post anything here you wouldn't want public,
+      and use a password you're not reusing somewhere important.
+    </p>
+
+    <div class="mt-12">
+      <a href="{{ url_for('communities') if user else url_for('login') }}" class="btn95">Back</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

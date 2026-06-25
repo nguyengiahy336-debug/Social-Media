@@ -14,12 +14,16 @@
     </div>
   </div>
   <div class="win95-body">
-    <p class="text-bold">Type a username to enter Win95Social</p>
-    <p class="text-sm">No password needed. New username? We'll make you an account on the spot.</p>
+    <p class="text-bold">Log in to Win95Social</p>
+    <p class="text-sm">New username? We'll create your account on the spot — just pick a password too.</p>
     <form method="POST" action="{{ url_for('login') }}">
       <div class="field">
         <label for="username">Username</label>
         <input type="text" id="username" name="username" maxlength="20" autofocus placeholder="e.g. tetofan99">
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" maxlength="100" placeholder="At least 4 characters">
       </div>
       {% if error %}
         <div class="error-text">{{ error }}</div>
@@ -28,6 +32,9 @@
         <button type="submit" class="btn95 primary">OK</button>
       </div>
     </form>
+    <hr class="win95">
+    <p class="text-sm">If you had an account before passwords existed, just type your usual username and pick a password now — it'll be saved for next time.</p>
+    <p class="text-sm"><a href="{{ url_for('about') }}">About this site</a></p>
   </div>
 </div>
 {% endblock %}
