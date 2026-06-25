@@ -150,6 +150,15 @@ def init_db():
             created_at TEXT NOT NULL
         )
     """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS follows (
+            id SERIAL PRIMARY KEY,
+            follower_id INTEGER NOT NULL REFERENCES users (id),
+            followed_id INTEGER NOT NULL REFERENCES users (id),
+            created_at TEXT NOT NULL,
+            UNIQUE(follower_id, followed_id)
+        )
+    """)
     db.commit()
 
     cur.execute("SELECT COUNT(*) as c FROM communities")
@@ -533,7 +542,22 @@ def profile(username):
         ORDER BY p.created_at DESC
     """, (profile_user["id"],))
     posts = cur.fetchall()
-    return render_template("profile.html", profile_user=profile_user, posts=posts, user=current_user())
+
+    cur.execute("SELECT COUNT(*) as c FROM follows WHERE followed_id = %s", (profile_user["id"],))
+    follower_count = cur.fetchone()["c"]
+    cur.execute("SELECT COUNT(*) as c FROM follows WHERE follower_id = %s", (profile_user["id"],))
+    following_count = cur.fetchone()["c"]
+
+    is_following = False
+    me = current_user()
+    if me and me["id"] != profile_user["id"]:
+        cur.execute("SELECT 1 FROM follows WHERE follower_id = %s AND followed_id = %s",
+                    (me["id"], profile_user["id"]))
+        is_following = cur.fetchone() is not None
+
+    return render_template("profile.html", profile_user=profile_user, posts=posts, user=me,
+                            follower_count=follower_count, following_count=following_count,
+                            is_following=is_following)
 
 
 @app.route("/profile/<username>/bio", methods=["POST"])
@@ -550,6 +574,40 @@ def update_bio(username):
     cur.execute("UPDATE users SET bio = %s WHERE id = %s", (bio, me["id"]))
     db.commit()
     return jsonify({"ok": True, "bio": bio})
+
+
+@app.route("/api/follow/<username>", methods=["POST"])
+def api_follow(username):
+    if "user_id" not in session:
+        return jsonify({"error": "not logged in"}), 401
+    db = get_db()
+    cur = db.cursor()
+    uid = session["user_id"]
+
+    cur.execute("SELECT * FROM users WHERE username = %s", (username,))
+    target = cur.fetchone()
+    if target is None:
+        return jsonify({"error": "user not found"}), 404
+    if target["id"] == uid:
+        return jsonify({"error": "can't follow yourself"}), 400
+
+    cur.execute("SELECT * FROM follows WHERE follower_id = %s AND followed_id = %s", (uid, target["id"]))
+    existing = cur.fetchone()
+
+    if existing:
+        cur.execute("DELETE FROM follows WHERE id = %s", (existing["id"],))
+        db.commit()
+        following = False
+    else:
+        cur.execute("INSERT INTO follows (follower_id, followed_id, created_at) VALUES (%s, %s, %s)",
+                     (uid, target["id"], now_iso()))
+        create_notification(cur, target["id"], uid, "follow")
+        db.commit()
+        following = True
+
+    cur.execute("SELECT COUNT(*) as c FROM follows WHERE followed_id = %s", (target["id"],))
+    follower_count = cur.fetchone()["c"]
+    return jsonify({"following": following, "follower_count": follower_count})
 
 
 # ---------- Routes: Notifications ----------

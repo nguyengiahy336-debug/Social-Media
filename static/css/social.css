@@ -275,6 +275,11 @@
   font-size: 12px;
 }
 
+.profile-follow-stats {
+  margin-top: 4px;
+  color: var(--win-gray-darker);
+}
+
 .profile-post-list {
   margin-top: 12px;
 }

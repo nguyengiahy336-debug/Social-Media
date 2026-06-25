@@ -18,6 +18,11 @@
       <div class="profile-avatar">{{ profile_user['username'][0]|upper }}</div>
       <div>
         <div class="profile-username">{{ profile_user['username'] }}</div>
+        <div class="profile-follow-stats text-sm">
+          <span><span class="text-bold">{{ follower_count }}</span> followers</span>
+          &middot;
+          <span><span class="text-bold">{{ following_count }}</span> following</span>
+        </div>
         <div class="profile-bio" id="bio-display">{{ profile_user['bio'] or 'No bio yet.' }}</div>
         {% if user and user['username'] == profile_user['username'] %}
         <div class="mt-8">
@@ -25,7 +30,10 @@
           <button class="btn95 btn95-sm mt-8" id="edit-bio-btn">Edit Bio</button>
         </div>
         {% elif user %}
-        <div class="mt-8">
+        <div class="mt-8 flex-row">
+          <button class="btn95 btn95-sm" id="follow-btn" data-following="{{ 'true' if is_following else 'false' }}">
+            {{ '&#10003; Friends'|safe if is_following else '&#128100;+ Add Friend'|safe }}
+          </button>
           <a href="{{ url_for('messages_thread_page', username=profile_user['username']) }}" class="btn95 btn95-sm">&#9993; Message</a>
         </div>
         {% endif %}
@@ -85,6 +93,37 @@ editBtn.addEventListener('click', async () => {
     editing = false;
   }
 });
+</script>
+{% endif %}
+
+{% if user and user['username'] != profile_user['username'] %}
+<script>
+const followBtn = document.getElementById('follow-btn');
+if (followBtn) {
+  followBtn.addEventListener('click', async () => {
+    // Play the dial-up sound right away on click, before the request resolves
+    const dialupSound = new Audio("{{ url_for('static', filename='audio/dialup.wav') }}");
+    dialupSound.volume = 0.5;
+    dialupSound.play().catch(() => { /* autoplay might be blocked on some browsers, fail silently */ });
+
+    followBtn.disabled = true;
+    try {
+      const res = await fetch(`/api/follow/{{ profile_user['username'] }}`, { method: 'POST' });
+      const data = await res.json();
+      if (data.following) {
+        followBtn.innerHTML = '&#10003; Friends';
+        followBtn.dataset.following = 'true';
+      } else {
+        followBtn.innerHTML = '&#128100;+ Add Friend';
+        followBtn.dataset.following = 'false';
+      }
+      // Update the follower count shown on the page
+      const followerCountEl = document.querySelector('.profile-follow-stats .text-bold');
+      if (followerCountEl) followerCountEl.textContent = data.follower_count;
+    } catch (e) { /* ignore */ }
+    followBtn.disabled = false;
+  });
+}
 </script>
 {% endif %}
 {% endblock %}
