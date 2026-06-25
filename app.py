@@ -7,6 +7,7 @@ import psycopg2.extras
 import cloudinary
 import cloudinary.uploader
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, g
+from werkzeug.security import generate_password_hash, check_password_hash
 
 ALLOWED_IMAGE = {"png", "jpg", "jpeg", "gif", "webp", "bmp"}
 ALLOWED_VIDEO = {"mp4", "webm", "mov", "avi"}
@@ -55,9 +56,14 @@ def init_db():
         CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
             username TEXT UNIQUE NOT NULL,
+            password_hash TEXT DEFAULT '',
             bio TEXT DEFAULT '',
             created_at TEXT NOT NULL
         )
+    """)
+    # Migration: add password_hash to a users table that existed before this column did
+    cur.execute("""
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT DEFAULT ''
     """)
     cur.execute("""
         CREATE TABLE IF NOT EXISTS communities (
@@ -148,22 +154,41 @@ def allowed_file(filename, allowed_set):
 def login():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+
         if not username:
             return render_template("login.html", error="Type a username, dummy.")
         if len(username) > 20:
             return render_template("login.html", error="Username too long (max 20 chars).")
+        if not password:
+            return render_template("login.html", error="Type a password too.")
+        if len(password) < 4:
+            return render_template("login.html", error="Password needs to be at least 4 characters.")
 
         db = get_db()
         cur = db.cursor()
         cur.execute("SELECT * FROM users WHERE username = %s", (username,))
         user = cur.fetchone()
+
         if user is None:
+            # Brand new account — create it with this password
             cur.execute(
-                "INSERT INTO users (username, created_at) VALUES (%s, %s) RETURNING *",
-                (username, now_iso()),
+                "INSERT INTO users (username, password_hash, created_at) VALUES (%s, %s, %s) RETURNING *",
+                (username, generate_password_hash(password), now_iso()),
             )
             user = cur.fetchone()
             db.commit()
+        elif not user["password_hash"]:
+            # Existing account from before passwords existed — set their password now
+            cur.execute(
+                "UPDATE users SET password_hash = %s WHERE id = %s",
+                (generate_password_hash(password), user["id"]),
+            )
+            db.commit()
+        else:
+            # Existing account with a password — verify it
+            if not check_password_hash(user["password_hash"], password):
+                return render_template("login.html", error="Wrong password.")
 
         session["user_id"] = user["id"]
         return redirect(url_for("communities"))
@@ -175,6 +200,11 @@ def login():
 def logout():
     session.clear()
     return redirect(url_for("login"))
+
+
+@app.route("/about")
+def about():
+    return render_template("about.html", user=current_user())
 
 
 # ---------- Routes: Communities ----------
