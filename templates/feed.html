@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+{% block title %}{{ community['name'] }} - Win95Social{% endblock %}
+{% block content %}
+<div class="win95-window">
+  <div class="win95-titlebar">
+    <div class="title-left">
+      <span class="title-icon"></span>
+      <span>{{ community['name'] }} - Feed</span>
+    </div>
+    <div class="win95-titlebar-btns">
+      <button disabled>_</button>
+      <button disabled>&#9633;</button>
+      <button disabled>X</button>
+    </div>
+  </div>
+  <div class="win95-menubar">
+    <a href="{{ url_for('communities') }}" style="text-decoration:none; color:black;"><span>&larr; Back to Communities</span></a>
+    <a href="{{ url_for('new_post', community_id=community['id']) }}" style="text-decoration:none; color:black;"><span>+ New Post</span></a>
+  </div>
+  <div class="win95-body" style="padding: 4px;">
+    <div class="feed-container" id="feed-container">
+      <div class="feed-card">
+        <div class="feed-card-text" style="display:flex; align-items:center; justify-content:center;">
+          <p class="text-sm">Loading posts...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Comments popup -->
+<div class="comments-overlay" id="comments-overlay">
+  <div class="win95-window comments-window">
+    <div class="win95-titlebar">
+      <div class="title-left">
+        <span class="title-icon"></span>
+        <span>Comments</span>
+      </div>
+      <div class="win95-titlebar-btns">
+        <button id="close-comments">X</button>
+      </div>
+    </div>
+    <div class="win95-body">
+      <div class="comments-list" id="comments-list"></div>
+      <div class="comment-input-row">
+        <input type="text" id="comment-input" maxlength="280" placeholder="Write a comment...">
+        <button class="btn95" id="comment-submit">Post</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const COMMUNITY_ID = {{ community['id'] }};
+let currentCommentPostId = null;
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function timeAgo(isoString) {
+  const date = new Date(isoString + 'Z');
+  const seconds = Math.floor((new Date() - date) / 1000);
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return minutes + 'm ago';
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return hours + 'h ago';
+  const days = Math.floor(hours / 24);
+  return days + 'd ago';
+}
+
+function renderPostCard(post) {
+  let mediaHtml = '';
+  if (post.post_type === 'image' && post.media_path) {
+    mediaHtml = `<div class="feed-card-media"><img src="/static/uploads/${post.media_path}" alt="post image"></div>`;
+  } else if (post.post_type === 'video' && post.media_path) {
+    mediaHtml = `<div class="feed-card-media"><video src="/static/uploads/${post.media_path}" controls playsinline></video></div>`;
+  }
+
+  let textHtml = '';
+  if (post.post_type === 'text' || post.title || post.body) {
+    textHtml = `
+      <div class="feed-card-text">
+        ${post.title ? `<div class="post-title">${escapeHtml(post.title)}</div>` : ''}
+        ${post.body ? `<div class="post-body">${escapeHtml(post.body)}</div>` : ''}
+      </div>
+    `;
+  }
+
+  const likedClass = post.liked_by_me ? 'liked' : '';
+  const likeLabel = post.liked_by_me ? '&#9733; Liked' : '&#9734; Like';
+
+  return `
+    <div class="feed-card" data-post-id="${post.id}">
+      <div class="feed-card-header">
+        <span class="post-user" onclick="window.location.href='/profile/${encodeURIComponent(post.username)}'">${escapeHtml(post.username)}</span>
+        <span class="text-sm">${timeAgo(post.created_at)}</span>
+      </div>
+      ${mediaHtml}
+      ${textHtml}
+      <div class="feed-card-footer">
+        <button class="btn95 btn95-sm like-btn ${likedClass}" data-post-id="${post.id}">${likeLabel} (${post.like_count})</button>
+        <button class="btn95 btn95-sm comment-btn" data-post-id="${post.id}">&#128172; Comments (${post.comment_count})</button>
+      </div>
+    </div>
+  `;
+}
+
+async function loadFeed() {
+  const container = document.getElementById('feed-container');
+  try {
+    const res = await fetch(`/api/posts/${COMMUNITY_ID}`);
+    if (!res.ok) throw new Error('failed to load');
+    const posts = await res.json();
+    if (posts.length === 0) {
+      container.innerHTML = `
+        <div class="feed-card">
+          <div class="feed-empty">
+            <p class="text-bold">No posts yet in this community.</p>
+            <p class="text-sm">Be the first to post something!</p>
+          </div>
+        </div>
+      `;
+      return;
+    }
+    container.innerHTML = posts.map(renderPostCard).join('');
+    attachCardListeners();
+  } catch (e) {
+    container.innerHTML = `<div class="feed-card"><div class="feed-empty"><p class="error-text">Couldn't load posts. Try refreshing.</p></div></div>`;
+  }
+}
+
+function attachCardListeners() {
+  document.querySelectorAll('.like-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const postId = btn.dataset.postId;
+      const res = await fetch(`/api/like/${postId}`, { method: 'POST' });
+      const data = await res.json();
+      btn.textContent = (data.liked ? '\u2605 Liked' : '\u2606 Like') + ` (${data.like_count})`;
+      btn.classList.toggle('liked', data.liked);
+    });
+  });
+
+  document.querySelectorAll('.comment-btn').forEach(btn => {
+    btn.addEventListener('click', () => openComments(btn.dataset.postId));
+  });
+}
+
+async function openComments(postId) {
+  currentCommentPostId = postId;
+  document.getElementById('comments-overlay').classList.add('open');
+  const list = document.getElementById('comments-list');
+  list.innerHTML = '<p class="text-sm">Loading...</p>';
+  const res = await fetch(`/api/comments/${postId}`);
+  const comments = await res.json();
+  if (comments.length === 0) {
+    list.innerHTML = '<p class="text-sm">No comments yet. Say something!</p>';
+  } else {
+    list.innerHTML = comments.map(c => `
+      <div class="comment-item">
+        <span class="comment-user">${escapeHtml(c.username)}:</span> ${escapeHtml(c.body)}
+      </div>
+    `).join('');
+    list.scrollTop = list.scrollHeight;
+  }
+}
+
+document.getElementById('close-comments').addEventListener('click', () => {
+  document.getElementById('comments-overlay').classList.remove('open');
+  currentCommentPostId = null;
+});
+
+document.getElementById('comment-submit').addEventListener('click', submitComment);
+document.getElementById('comment-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') submitComment();
+});
+
+async function submitComment() {
+  const input = document.getElementById('comment-input');
+  const body = input.value.trim();
+  if (!body || !currentCommentPostId) return;
+  const res = await fetch(`/api/comments/${currentCommentPostId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ body })
+  });
+  const data = await res.json();
+  if (data.ok) {
+    input.value = '';
+    openComments(currentCommentPostId);
+    const commentBtn = document.querySelector(`.comment-btn[data-post-id="${currentCommentPostId}"]`);
+    if (commentBtn) commentBtn.innerHTML = `&#128172; Comments (${data.comment_count})`;
+  }
+}
+
+loadFeed();
+</script>
+{% endblock %}

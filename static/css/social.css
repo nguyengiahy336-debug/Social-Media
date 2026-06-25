@@ -1,0 +1,334 @@
+/* ===========================================
+   WIN95SOCIAL - app-specific styles
+   =========================================== */
+
+/* ---------- Communities grid (like desktop icons) ---------- */
+.community-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 14px;
+  padding: 8px;
+}
+
+.community-icon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 10px 6px;
+  cursor: pointer;
+  border: 1px dashed transparent;
+  text-decoration: none;
+  color: black;
+}
+
+.community-icon:hover {
+  border: 1px dashed var(--win-gray-darker);
+  background: rgba(0,0,128,0.06);
+}
+
+.community-icon .icon-img {
+  width: 42px;
+  height: 42px;
+  background: linear-gradient(135deg, #ffd700, #ff8c00);
+  border: 2px solid var(--win-gray-darker);
+  border-radius: 3px;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+
+.community-icon .icon-label {
+  font-size: 11px;
+  font-weight: bold;
+  word-break: break-word;
+}
+
+.community-icon .icon-sub {
+  font-size: 10px;
+  color: var(--win-gray-darker);
+}
+
+/* ---------- New community form ---------- */
+.new-community-box {
+  border-top: 1px solid var(--win-gray-darker);
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+/* ---------- Feed: TikTok-style vertical scroll-snap ---------- */
+.feed-container {
+  width: 100%;
+  max-width: 480px;
+  height: calc(100vh - 110px);
+  margin: 0 auto;
+  overflow-y: scroll;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: thin;
+}
+
+.feed-card {
+  scroll-snap-align: start;
+  min-height: calc(100vh - 110px);
+  display: flex;
+  flex-direction: column;
+  background: var(--win-gray);
+  border: 2px solid var(--win-white);
+  border-right-color: var(--win-gray-darker);
+  border-bottom-color: var(--win-gray-darker);
+  margin-bottom: 16px;
+  position: relative;
+}
+
+.feed-card-header {
+  padding: 6px 10px;
+  background: var(--win-gray-light);
+  border-bottom: 1px solid var(--win-gray-darker);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+}
+
+.feed-card-header .post-user {
+  font-weight: bold;
+  color: var(--win-blue);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.feed-card-media {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  overflow: hidden;
+  min-height: 280px;
+}
+
+.feed-card-media img,
+.feed-card-media video {
+  max-width: 100%;
+  max-height: 60vh;
+  object-fit: contain;
+}
+
+.feed-card-text {
+  flex: 1;
+  padding: 16px;
+  background: var(--win-white);
+  overflow-y: auto;
+}
+
+.feed-card-text .post-title {
+  font-weight: bold;
+  font-size: 15px;
+  margin-bottom: 8px;
+}
+
+.feed-card-text .post-body {
+  font-size: 13px;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.feed-card-footer {
+  padding: 8px 10px;
+  background: var(--win-gray);
+  border-top: 1px solid var(--win-white);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.like-btn.liked {
+  font-weight: bold;
+  color: var(--win-red);
+}
+
+.feed-empty {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+/* ---------- Comments popup window ---------- */
+.comments-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 500;
+}
+
+.comments-overlay.open {
+  display: flex;
+}
+
+.comments-window {
+  width: 90%;
+  max-width: 420px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.comments-list {
+  flex: 1;
+  overflow-y: auto;
+  max-height: 280px;
+  padding: 6px;
+}
+
+.comment-item {
+  border-bottom: 1px solid var(--win-gray-dark);
+  padding: 6px 4px;
+  font-size: 12px;
+}
+
+.comment-item .comment-user {
+  font-weight: bold;
+  color: var(--win-blue);
+}
+
+.comment-input-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.comment-input-row input {
+  flex: 1;
+}
+
+/* ---------- New post form ---------- */
+.post-type-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.post-type-tabs .tab95 {
+  flex: 1;
+  text-align: center;
+  padding: 6px;
+  cursor: pointer;
+  background: var(--win-gray);
+  border: 2px solid var(--win-white);
+  border-right-color: var(--win-gray-darker);
+  border-bottom-color: var(--win-gray-darker);
+  font-weight: bold;
+  font-size: 12px;
+}
+
+.post-type-tabs .tab95.active {
+  background: var(--win-gray-light);
+  border-color: var(--win-gray-darker) var(--win-white) var(--win-white) var(--win-gray-darker);
+}
+
+.file-drop-zone {
+  border: 2px dashed var(--win-gray-darker);
+  background: var(--win-white);
+  padding: 24px;
+  text-align: center;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.file-drop-zone.has-file {
+  border-color: var(--win-green);
+}
+
+/* ---------- Profile ---------- */
+.profile-header {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 4px;
+}
+
+.profile-avatar {
+  width: 64px;
+  height: 64px;
+  background: linear-gradient(135deg, #1084d0, #000080);
+  border: 2px solid var(--win-gray-darker);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 28px;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.profile-username {
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.profile-bio {
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.profile-post-list {
+  margin-top: 12px;
+}
+
+.profile-post-item {
+  border-bottom: 1px solid var(--win-gray-dark);
+  padding: 8px 4px;
+  font-size: 12px;
+}
+
+.profile-post-item .pp-community {
+  color: var(--win-blue);
+  font-weight: bold;
+  font-size: 10px;
+}
+
+.profile-post-item .pp-title {
+  font-weight: bold;
+}
+
+.profile-post-item .pp-stats {
+  font-size: 10px;
+  color: var(--win-gray-darker);
+}
+
+/* ---------- Top nav bar (persistent across pages) ---------- */
+.app-navbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 760px;
+  margin-bottom: 10px;
+}
+
+.app-navbar .nav-links {
+  display: flex;
+  gap: 8px;
+}
+
+/* ---------- Mobile responsiveness ---------- */
+@media (max-width: 600px) {
+  .desktop {
+    padding: 8px;
+  }
+  .win95-window {
+    max-width: 100%;
+  }
+  .feed-container {
+    max-width: 100%;
+  }
+  .app-navbar {
+    max-width: 100%;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+}

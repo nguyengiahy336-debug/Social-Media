@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Communities - Win95Social{% endblock %}
+{% block content %}
+<div class="win95-window">
+  <div class="win95-titlebar">
+    <div class="title-left">
+      <span class="title-icon"></span>
+      <span>My Communities</span>
+    </div>
+    <div class="win95-titlebar-btns">
+      <button disabled>_</button>
+      <button disabled>&#9633;</button>
+      <button disabled>X</button>
+    </div>
+  </div>
+  <div class="win95-menubar">
+    <span>File</span><span>Edit</span><span>View</span><span>Help</span>
+  </div>
+  <div class="win95-body">
+    <p class="text-sm">Double-click... err, click a community to open its feed.</p>
+    <div class="community-grid">
+      {% for c in communities %}
+      <a href="{{ url_for('feed', community_id=c['id']) }}" class="community-icon">
+        <div class="icon-img">&#128187;</div>
+        <div class="icon-label">{{ c['name'] }}</div>
+        <div class="icon-sub">{{ c['post_count'] }} posts</div>
+      </a>
+      {% endfor %}
+    </div>
+
+    <div class="new-community-box">
+      <p class="text-bold text-sm">Start a new community</p>
+      <form method="POST" action="{{ url_for('new_community') }}">
+        <div class="field">
+          <label for="name">Name</label>
+          <input type="text" id="name" name="name" maxlength="30" placeholder="e.g. r/ThinkPads">
+        </div>
+        <div class="field">
+          <label for="description">Description</label>
+          <input type="text" id="description" name="description" maxlength="120" placeholder="What's it about?">
+        </div>
+        <button type="submit" class="btn95">Create Community</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

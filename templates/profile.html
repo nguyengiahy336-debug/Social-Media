@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}{{ profile_user['username'] }} - Win95Social{% endblock %}
+{% block content %}
+<div class="win95-window">
+  <div class="win95-titlebar">
+    <div class="title-left">
+      <span class="title-icon"></span>
+      <span>{{ profile_user['username'] }} - Properties</span>
+    </div>
+    <div class="win95-titlebar-btns">
+      <button disabled>_</button>
+      <button disabled>&#9633;</button>
+      <button disabled>X</button>
+    </div>
+  </div>
+  <div class="win95-body">
+    <div class="profile-header">
+      <div class="profile-avatar">{{ profile_user['username'][0]|upper }}</div>
+      <div>
+        <div class="profile-username">{{ profile_user['username'] }}</div>
+        <div class="profile-bio" id="bio-display">{{ profile_user['bio'] or 'No bio yet.' }}</div>
+        {% if user and user['username'] == profile_user['username'] %}
+        <div class="mt-8">
+          <input type="text" id="bio-input" maxlength="280" placeholder="Write a short bio..." style="display:none;">
+          <button class="btn95 btn95-sm mt-8" id="edit-bio-btn">Edit Bio</button>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <hr class="win95">
+
+    <p class="text-bold text-sm">Posts ({{ posts|length }})</p>
+    <div class="profile-post-list inset95">
+      {% if posts|length == 0 %}
+        <p class="text-sm">No posts yet.</p>
+      {% endif %}
+      {% for p in posts %}
+      <a href="{{ url_for('feed', community_id=p['community_id']) }}" class="profile-post-item" style="display:block; text-decoration:none; color:black;">
+        <div class="pp-community">{{ p['community_name'] }}</div>
+        <div class="pp-title">
+          {% if p['title'] %}{{ p['title'] }}{% else %}({{ p['post_type'] }} post){% endif %}
+        </div>
+        <div class="pp-stats">&#9733; {{ p['like_count'] }} likes &middot; &#128172; {{ p['comment_count'] }} comments</div>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+{% if user and user['username'] == profile_user['username'] %}
+<script>
+const editBtn = document.getElementById('edit-bio-btn');
+const bioDisplay = document.getElementById('bio-display');
+const bioInput = document.getElementById('bio-input');
+let editing = false;
+
+editBtn.addEventListener('click', async () => {
+  if (!editing) {
+    bioInput.value = bioDisplay.textContent.trim() === 'No bio yet.' ? '' : bioDisplay.textContent.trim();
+    bioInput.style.display = 'block';
+    bioDisplay.style.display = 'none';
+    editBtn.textContent = 'Save Bio';
+    editing = true;
+  } else {
+    const newBio = bioInput.value.trim();
+    const res = await fetch(`/profile/{{ profile_user['username'] }}/bio`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bio: newBio })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      bioDisplay.textContent = data.bio || 'No bio yet.';
+    }
+    bioInput.style.display = 'none';
+    bioDisplay.style.display = 'block';
+    editBtn.textContent = 'Edit Bio';
+    editing = false;
+  }
+});
+</script>
+{% endif %}
+{% endblock %}

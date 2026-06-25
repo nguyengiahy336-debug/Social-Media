@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Log In - Win95Social{% endblock %}
+{% block content %}
+<div class="win95-window" style="max-width: 380px; margin-top: 10vh;">
+  <div class="win95-titlebar">
+    <div class="title-left">
+      <span class="title-icon"></span>
+      <span>Win95Social - Logon</span>
+    </div>
+    <div class="win95-titlebar-btns">
+      <button disabled>_</button>
+      <button disabled>&#9633;</button>
+      <button disabled>X</button>
+    </div>
+  </div>
+  <div class="win95-body">
+    <p class="text-bold">Type a username to enter Win95Social</p>
+    <p class="text-sm">No password needed. New username? We'll make you an account on the spot.</p>
+    <form method="POST" action="{{ url_for('login') }}">
+      <div class="field">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" maxlength="20" autofocus placeholder="e.g. tetofan99">
+      </div>
+      {% if error %}
+        <div class="error-text">{{ error }}</div>
+      {% endif %}
+      <div class="mt-12 flex-row" style="justify-content: flex-end;">
+        <button type="submit" class="btn95 primary">OK</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

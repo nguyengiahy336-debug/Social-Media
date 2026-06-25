@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Win95Social{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/win95.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/social.css') }}">
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+  <div class="desktop">
+    {% if user %}
+    <div class="app-navbar">
+      <div class="flex-row">
+        <span class="text-bold">Win95Social</span>
+      </div>
+      <div class="nav-links">
+        <a href="{{ url_for('communities') }}" class="btn95 btn95-sm">Communities</a>
+        <a href="{{ url_for('profile', username=user['username']) }}" class="btn95 btn95-sm">My Profile</a>
+        <a href="{{ url_for('logout') }}" class="btn95 btn95-sm">Log Off</a>
+      </div>
+    </div>
+    {% endif %}
+
+    {% block content %}{% endblock %}
+  </div>
+
+  {% if user %}
+  <div class="taskbar">
+    <div class="btn95 start-btn">
+      <span>&#129513;</span> Start
+    </div>
+    <div class="task-item">Logged in as {{ user['username'] }}</div>
+    <div class="clock" id="taskbar-clock">--:--</div>
+  </div>
+  <script>
+    function updateClock() {
+      const el = document.getElementById('taskbar-clock');
+      if (!el) return;
+      const now = new Date();
+      let h = now.getHours();
+      const m = now.getMinutes().toString().padStart(2, '0');
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      h = h % 12 || 12;
+      el.textContent = `${h}:${m} ${ampm}`;
+    }
+    updateClock();
+    setInterval(updateClock, 1000 * 30);
+  </script>
+  {% endif %}
+
+  {% block extra_scripts %}{% endblock %}
+</body>
+</html>

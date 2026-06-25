@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}New Post - Win95Social{% endblock %}
+{% block content %}
+<div class="win95-window" style="max-width: 480px;">
+  <div class="win95-titlebar">
+    <div class="title-left">
+      <span class="title-icon"></span>
+      <span>New Post in {{ community['name'] }}</span>
+    </div>
+    <div class="win95-titlebar-btns">
+      <button disabled>_</button>
+      <button disabled>&#9633;</button>
+      <button onclick="window.location.href='{{ url_for('feed', community_id=community['id']) }}'">X</button>
+    </div>
+  </div>
+  <div class="win95-body">
+    <div class="post-type-tabs">
+      <div class="tab95 active" data-type="text">&#128221; Text</div>
+      <div class="tab95" data-type="image">&#128247; Image</div>
+      <div class="tab95" data-type="video">&#127909; Video</div>
+    </div>
+
+    <form method="POST" action="{{ url_for('new_post', community_id=community['id']) }}" enctype="multipart/form-data" id="post-form">
+      <input type="hidden" name="post_type" id="post_type" value="text">
+
+      <div class="field">
+        <label for="title">Title (optional)</label>
+        <input type="text" id="title" name="title" maxlength="100" placeholder="Give it a title">
+      </div>
+
+      <div class="field" id="body-field">
+        <label for="body">What's on your mind?</label>
+        <textarea id="body" name="body" rows="5" placeholder="Type your post..."></textarea>
+      </div>
+
+      <div class="field" id="media-field" style="display:none;">
+        <label id="media-label">Upload file</label>
+        <input type="file" id="media" name="media" class="inset95">
+        <p class="text-sm" id="media-hint"></p>
+      </div>
+
+      {% if error %}
+        <div class="error-text">{{ error }}</div>
+      {% endif %}
+
+      <div class="mt-12 flex-row" style="justify-content: flex-end;">
+        <a href="{{ url_for('feed', community_id=community['id']) }}" class="btn95">Cancel</a>
+        <button type="submit" class="btn95 primary">Post It</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const tabs = document.querySelectorAll('.tab95');
+const postTypeInput = document.getElementById('post_type');
+const bodyField = document.getElementById('body-field');
+const mediaField = document.getElementById('media-field');
+const mediaLabel = document.getElementById('media-label');
+const mediaHint = document.getElementById('media-hint');
+const mediaInput = document.getElementById('media');
+
+function setType(type) {
+  postTypeInput.value = type;
+  tabs.forEach(t => t.classList.toggle('active', t.dataset.type === type));
+
+  if (type === 'text') {
+    bodyField.style.display = 'block';
+    mediaField.style.display = 'none';
+    mediaInput.removeAttribute('accept');
+  } else if (type === 'image') {
+    bodyField.style.display = 'block';
+    mediaField.style.display = 'block';
+    mediaLabel.textContent = 'Upload image';
+    mediaHint.textContent = 'PNG, JPG, GIF, WEBP, BMP';
+    mediaInput.setAttribute('accept', 'image/*');
+  } else if (type === 'video') {
+    bodyField.style.display = 'block';
+    mediaField.style.display = 'block';
+    mediaLabel.textContent = 'Upload video';
+    mediaHint.textContent = 'MP4, WEBM, MOV, AVI';
+    mediaInput.setAttribute('accept', 'video/*');
+  }
+}
+
+tabs.forEach(tab => {
+  tab.addEventListener('click', () => setType(tab.dataset.type));
+});
+</script>
+{% endblock %}
