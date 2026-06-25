@@ -24,6 +24,10 @@
           <input type="text" id="bio-input" maxlength="280" placeholder="Write a short bio..." style="display:none;">
           <button class="btn95 btn95-sm mt-8" id="edit-bio-btn">Edit Bio</button>
         </div>
+        {% elif user %}
+        <div class="mt-8">
+          <a href="{{ url_for('messages_thread_page', username=profile_user['username']) }}" class="btn95 btn95-sm">&#9993; Message</a>
+        </div>
         {% endif %}
       </div>
     </div>

@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Notifications - Win95Social{% endblock %}
+{% block content %}
+<div class="win95-window">
+  <div class="win95-titlebar">
+    <div class="title-left">
+      <span class="title-icon"></span>
+      <span>Notifications</span>
+    </div>
+    <div class="win95-titlebar-btns">
+      <button disabled>_</button>
+      <button disabled>&#9633;</button>
+      <button disabled>X</button>
+    </div>
+  </div>
+  <div class="win95-body">
+    <div id="notif-list">
+      <p class="text-sm">Loading...</p>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function timeAgo(isoString) {
+  const date = new Date(isoString + 'Z');
+  const seconds = Math.floor((new Date() - date) / 1000);
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return minutes + 'm ago';
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return hours + 'h ago';
+  const days = Math.floor(hours / 24);
+  return days + 'd ago';
+}
+
+function notifIcon(type) {
+  if (type === 'like') return '&#9733;';
+  if (type === 'comment') return '&#128172;';
+  if (type === 'follow') return '&#128100;';
+  return '&#128276;';
+}
+
+function notifText(n) {
+  if (n.notif_type === 'like') return 'liked your post';
+  if (n.notif_type === 'comment') return `commented: "${escapeHtml(n.message_preview)}"`;
+  if (n.notif_type === 'follow') return 'followed you';
+  return 'did something';
+}
+
+async function loadNotifications() {
+  const list = document.getElementById('notif-list');
+  try {
+    const res = await fetch('/api/notifications');
+    const notifs = await res.json();
+    if (notifs.length === 0) {
+      list.innerHTML = '<p class="text-sm">No notifications yet. Go like something!</p>';
+    } else {
+      list.innerHTML = notifs.map(n => `
+        <div class="notification-item ${n.is_read ? '' : 'unread'}">
+          <span class="notification-icon">${notifIcon(n.notif_type)}</span>
+          <div class="notification-text">
+            <span class="notif-actor">${escapeHtml(n.actor_username)}</span> ${notifText(n)}
+            <div class="notification-time">${timeAgo(n.created_at)}</div>
+          </div>
+        </div>
+      `).join('');
+    }
+    // Mark all as read now that they've been viewed
+    fetch('/api/notifications/mark_read', { method: 'POST' });
+  } catch (e) {
+    list.innerHTML = '<p class="error-text">Couldn\'t load notifications.</p>';
+  }
+}
+
+loadNotifications();
+</script>
+{% endblock %}

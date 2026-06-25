@@ -163,7 +163,7 @@ async function openComments(postId) {
   } else {
     list.innerHTML = comments.map(c => `
       <div class="comment-item">
-        <span class="comment-user">${escapeHtml(c.username)}:</span> ${escapeHtml(c.body)}
+        <span class="comment-user" onclick="window.location.href='/profile/${encodeURIComponent(c.username)}'" style="cursor:pointer;">${escapeHtml(c.username)}:</span> ${escapeHtml(c.body)}
       </div>
     `).join('');
     list.scrollTop = list.scrollHeight;

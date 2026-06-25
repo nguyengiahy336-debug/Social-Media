@@ -15,8 +15,18 @@
       <div class="flex-row">
         <span class="text-bold">Win95Social</span>
       </div>
+      <form action="{{ url_for('search_page') }}" method="GET" class="navbar-search">
+        <input type="text" name="q" placeholder="Search communities & posts..." maxlength="100">
+        <button type="submit" class="btn95 btn95-sm">&#128269;</button>
+      </form>
       <div class="nav-links">
         <a href="{{ url_for('communities') }}" class="btn95 btn95-sm">Communities</a>
+        <a href="{{ url_for('notifications_page') }}" class="btn95 btn95-sm nav-icon-btn" id="notif-nav-link">
+          &#128276;<span class="badge-count" id="notif-badge" style="display:none;">0</span>
+        </a>
+        <a href="{{ url_for('messages_page') }}" class="btn95 btn95-sm nav-icon-btn" id="dm-nav-link">
+          &#9993;<span class="badge-count" id="dm-badge" style="display:none;">0</span>
+        </a>
         <a href="{{ url_for('profile', username=user['username']) }}" class="btn95 btn95-sm">My Profile</a>
         <a href="{{ url_for('about') }}" class="btn95 btn95-sm">About</a>
         <a href="{{ url_for('logout') }}" class="btn95 btn95-sm">Log Off</a>
@@ -48,6 +58,34 @@
     }
     updateClock();
     setInterval(updateClock, 1000 * 30);
+
+    async function pollUnreadCounts() {
+      try {
+        const res = await fetch('/api/notifications/unread_count');
+        if (!res.ok) return;
+        const data = await res.json();
+        const notifBadge = document.getElementById('notif-badge');
+        const dmBadge = document.getElementById('dm-badge');
+        if (notifBadge) {
+          if (data.unread_notifications > 0) {
+            notifBadge.textContent = data.unread_notifications > 9 ? '9+' : data.unread_notifications;
+            notifBadge.style.display = 'inline-block';
+          } else {
+            notifBadge.style.display = 'none';
+          }
+        }
+        if (dmBadge) {
+          if (data.unread_messages > 0) {
+            dmBadge.textContent = data.unread_messages > 9 ? '9+' : data.unread_messages;
+            dmBadge.style.display = 'inline-block';
+          } else {
+            dmBadge.style.display = 'none';
+          }
+        }
+      } catch (e) { /* fail silently, not critical */ }
+    }
+    pollUnreadCounts();
+    setInterval(pollUnreadCounts, 15000);
   </script>
   {% endif %}
 

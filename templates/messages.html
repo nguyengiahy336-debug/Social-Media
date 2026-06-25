@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}Messages - Win95Social{% endblock %}
+{% block content %}
+<div class="win95-window" style="max-width: 700px;">
+  <div class="win95-titlebar">
+    <div class="title-left">
+      <span class="title-icon"></span>
+      <span>Messages{% if other_username %} - {{ other_username }}{% endif %}</span>
+    </div>
+    <div class="win95-titlebar-btns">
+      <button disabled>_</button>
+      <button disabled>&#9633;</button>
+      <button disabled>X</button>
+    </div>
+  </div>
+  <div class="win95-body" style="padding: 0;">
+    <div class="dm-layout">
+      <div class="dm-sidebar">
+        <div class="dm-new-convo">
+          <input type="text" id="new-convo-username" placeholder="Username to message..." maxlength="20">
+          <button class="btn95 btn95-sm mt-8" id="new-convo-btn" style="width:100%;">Start Chat</button>
+        </div>
+        <div id="conversation-list">
+          <p class="text-sm" style="padding: 8px;">Loading...</p>
+        </div>
+      </div>
+      <div class="dm-thread">
+        {% if other_username %}
+        <div class="dm-messages" id="dm-messages"></div>
+        <div class="dm-input-row">
+          <input type="text" id="dm-input" maxlength="1000" placeholder="Type a message...">
+          <button class="btn95" id="dm-send-btn">Send</button>
+        </div>
+        {% else %}
+        <div class="dm-empty-state">
+          <p>Pick a conversation on the left, or start a new one.</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const CURRENT_USERNAME = "{{ user['username'] }}";
+const OTHER_USERNAME = {{ ('"' + other_username + '"') if other_username else 'null' }};
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function timeAgo(isoString) {
+  const date = new Date(isoString + 'Z');
+  const seconds = Math.floor((new Date() - date) / 1000);
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return minutes + 'm ago';
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return hours + 'h ago';
+  const days = Math.floor(hours / 24);
+  return days + 'd ago';
+}
+
+async function loadConversations() {
+  const list = document.getElementById('conversation-list');
+  try {
+    const res = await fetch('/api/messages/conversations');
+    const convos = await res.json();
+    if (convos.length === 0) {
+      list.innerHTML = '<p class="text-sm" style="padding: 8px;">No conversations yet.</p>';
+      return;
+    }
+    list.innerHTML = convos.map(c => {
+      const isActive = c.other_username === OTHER_USERNAME;
+      const preview = c.last_message ? escapeHtml(c.last_message) : '';
+      return `
+        <a href="/messages/${encodeURIComponent(c.other_username)}" class="dm-conversation-item ${isActive ? 'active' : ''}">
+          <div class="dm-conv-name">${escapeHtml(c.other_username)} ${c.unread_count > 0 ? '&#128308;' : ''}</div>
+          <div class="dm-conv-preview">${preview}</div>
+        </a>
+      `;
+    }).join('');
+  } catch (e) {
+    list.innerHTML = '<p class="error-text" style="padding: 8px;">Couldn\'t load conversations.</p>';
+  }
+}
+
+async function loadThread() {
+  if (!OTHER_USERNAME) return;
+  const container = document.getElementById('dm-messages');
+  try {
+    const res = await fetch(`/api/messages/${encodeURIComponent(OTHER_USERNAME)}`);
+    const msgs = await res.json();
+    container.innerHTML = msgs.map(m => `
+      <div class="dm-bubble ${m.sender_username === CURRENT_USERNAME ? 'mine' : 'theirs'}">
+        ${escapeHtml(m.body)}
+        <span class="dm-time">${timeAgo(m.created_at)}</span>
+      </div>
+    `).join('');
+    container.scrollTop = container.scrollHeight;
+  } catch (e) {
+    container.innerHTML = '<p class="error-text">Couldn\'t load messages.</p>';
+  }
+}
+
+async function sendMessage() {
+  if (!OTHER_USERNAME) return;
+  const input = document.getElementById('dm-input');
+  const body = input.value.trim();
+  if (!body) return;
+  input.value = '';
+  try {
+    const res = await fetch(`/api/messages/${encodeURIComponent(OTHER_USERNAME)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body })
+    });
+    if (res.ok) {
+      loadThread();
+      loadConversations();
+    }
+  } catch (e) { /* ignore */ }
+}
+
+const sendBtn = document.getElementById('dm-send-btn');
+if (sendBtn) {
+  sendBtn.addEventListener('click', sendMessage);
+  document.getElementById('dm-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') sendMessage();
+  });
+}
+
+document.getElementById('new-convo-btn').addEventListener('click', () => {
+  const username = document.getElementById('new-convo-username').value.trim();
+  if (!username) return;
+  window.location.href = `/messages/${encodeURIComponent(username)}`;
+});
+
+loadConversations();
+loadThread();
+if (OTHER_USERNAME) {
+  setInterval(loadThread, 5000);
+}
+</script>
+{% endblock %}

@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Search - Win95Social{% endblock %}
+{% block content %}
+<div class="win95-window">
+  <div class="win95-titlebar">
+    <div class="title-left">
+      <span class="title-icon"></span>
+      <span>Search Results{% if query %} - "{{ query }}"{% endif %}</span>
+    </div>
+    <div class="win95-titlebar-btns">
+      <button disabled>_</button>
+      <button disabled>&#9633;</button>
+      <button disabled>X</button>
+    </div>
+  </div>
+  <div class="win95-body">
+    {% if not query %}
+      <p class="text-sm">Type something in the search bar up top to find communities and posts.</p>
+    {% else %}
+      <div id="search-results">
+        <p class="text-sm">Searching...</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+{% if query %}
+<script>
+const QUERY = {{ query|tojson }};
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+async function runSearch() {
+  const container = document.getElementById('search-results');
+  try {
+    const res = await fetch(`/api/search?q=${encodeURIComponent(QUERY)}`);
+    const data = await res.json();
+
+    if (data.communities.length === 0 && data.posts.length === 0) {
+      container.innerHTML = '<div class="search-empty">No communities or posts found for that search.</div>';
+      return;
+    }
+
+    let html = '';
+
+    if (data.communities.length > 0) {
+      html += '<div class="search-section-title">Communities</div>';
+      html += '<div class="community-grid">';
+      html += data.communities.map(c => `
+        <a href="/feed/${c.id}" class="community-icon">
+          <div class="icon-img">&#128187;</div>
+          <div class="icon-label">${escapeHtml(c.name)}</div>
+          <div class="icon-sub">${c.post_count} posts</div>
+        </a>
+      `).join('');
+      html += '</div>';
+    }
+
+    if (data.posts.length > 0) {
+      html += '<div class="search-section-title">Posts</div>';
+      html += data.posts.map(p => `
+        <a href="/feed/${p.community_id}" class="search-result-post">
+          <span class="text-bold">${p.title ? escapeHtml(p.title) : '(untitled ' + p.post_type + ' post)'}</span>
+          <span class="text-sm"> by ${escapeHtml(p.username)} in ${escapeHtml(p.community_name)}</span>
+          <div class="text-sm">&#9733; ${p.like_count} &middot; &#128172; ${p.comment_count}</div>
+        </a>
+      `).join('');
+    }
+
+    container.innerHTML = html;
+  } catch (e) {
+    container.innerHTML = '<div class="search-empty">Search failed. Try again.</div>';
+  }
+}
+
+runSearch();
+</script>
+{% endif %}
+{% endblock %}
