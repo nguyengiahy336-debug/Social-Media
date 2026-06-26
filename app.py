@@ -1,6 +1,6 @@
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 import psycopg2
 import psycopg2.extras
@@ -171,8 +171,13 @@ def init_db():
             sponsor_name TEXT DEFAULT '',
             network_slot_html TEXT DEFAULT '',
             is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            expires_at TEXT DEFAULT '',
             created_at TEXT NOT NULL
         )
+    """)
+    # Migration: add expires_at to an ads table that existed before this column did
+    cur.execute("""
+        ALTER TABLE ads ADD COLUMN IF NOT EXISTS expires_at TEXT DEFAULT ''
     """)
     db.commit()
 
@@ -381,8 +386,12 @@ def api_posts(community_id):
         p["comment_count"] = int(p["comment_count"])
         p["is_ad"] = False
 
-    cur.execute("SELECT * FROM ads WHERE community_id = %s AND is_active = TRUE ORDER BY id ASC LIMIT 3",
-                (community_id,))
+    cur.execute("""
+        SELECT * FROM ads
+        WHERE community_id = %s AND is_active = TRUE
+          AND (expires_at = '' OR expires_at > %s)
+        ORDER BY id ASC LIMIT 3
+    """, (community_id, now_iso()))
     ads = [dict(r) for r in cur.fetchall()]
     for a in ads:
         a["is_ad"] = True
@@ -891,7 +900,10 @@ def new_ad(community_id):
     if community is None:
         return redirect(url_for("communities"))
 
-    cur.execute("SELECT COUNT(*) as c FROM ads WHERE community_id = %s AND is_active = TRUE", (community_id,))
+    cur.execute("""
+        SELECT COUNT(*) as c FROM ads
+        WHERE community_id = %s AND is_active = TRUE AND (expires_at = '' OR expires_at > %s)
+    """, (community_id, now_iso()))
     active_count = cur.fetchone()["c"]
 
     if request.method == "POST":
@@ -905,7 +917,20 @@ def new_ad(community_id):
         link_url = request.form.get("link_url", "").strip()
         sponsor_name = request.form.get("sponsor_name", "").strip()
         network_slot_html = request.form.get("network_slot_html", "").strip()
+        expires_in_days = request.form.get("expires_in_days", "").strip()
         media_path = ""
+        expires_at = ""
+
+        if expires_in_days:
+            try:
+                days = int(expires_in_days)
+                if days < 1 or days > 365:
+                    return render_template("new_ad.html", community=community, user=current_user(),
+                                            active_count=active_count, error="Expiry must be between 1 and 365 days.")
+                expires_at = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+            except ValueError:
+                return render_template("new_ad.html", community=community, user=current_user(),
+                                        active_count=active_count, error="Expiry days must be a number.")
 
         if ad_type == "custom":
             if not title:
@@ -934,9 +959,9 @@ def new_ad(community_id):
                                     active_count=active_count, error="Unknown ad type.")
 
         cur.execute("""
-            INSERT INTO ads (community_id, ad_type, title, body, media_path, link_url, sponsor_name, network_slot_html, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, (community_id, ad_type, title, body, media_path, link_url, sponsor_name, network_slot_html, now_iso()))
+            INSERT INTO ads (community_id, ad_type, title, body, media_path, link_url, sponsor_name, network_slot_html, expires_at, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (community_id, ad_type, title, body, media_path, link_url, sponsor_name, network_slot_html, expires_at, now_iso()))
         db.commit()
         return redirect(url_for("manage_ads", community_id=community_id))
 
@@ -973,7 +998,10 @@ def toggle_ad(ad_id):
 
     new_state = not ad["is_active"]
     if new_state:
-        cur.execute("SELECT COUNT(*) as c FROM ads WHERE community_id = %s AND is_active = TRUE", (ad["community_id"],))
+        cur.execute("""
+            SELECT COUNT(*) as c FROM ads
+            WHERE community_id = %s AND is_active = TRUE AND (expires_at = '' OR expires_at > %s)
+        """, (ad["community_id"], now_iso()))
         active_count = cur.fetchone()["c"]
         if active_count >= 3:
             return jsonify({"error": "Max 3 active ads per community"}), 400

@@ -30,6 +30,11 @@
         </div>
         <span class="text-sm ad-status">{{ 'ACTIVE' if ad['is_active'] else 'inactive' }}</span>
       </div>
+      {% if ad['expires_at'] %}
+        <p class="text-sm">Expires: {{ ad['expires_at'][:10] }}</p>
+      {% else %}
+        <p class="text-sm">No expiry set</p>
+      {% endif %}
       {% if ad['ad_type'] == 'custom' %}
         <p class="text-sm">{{ ad['body'] }}</p>
         {% if ad['sponsor_name'] %}<p class="text-sm">Sponsor: {{ ad['sponsor_name'] }}</p>{% endif %}
