@@ -16,6 +16,7 @@
   <div class="win95-menubar">
     <a href="{{ url_for('communities') }}" style="text-decoration:none; color:black;"><span>&larr; Back to Communities</span></a>
     <a href="{{ url_for('new_post', community_id=community['id']) }}" style="text-decoration:none; color:black;"><span>+ New Post</span></a>
+    <a href="{{ url_for('manage_ads', community_id=community['id']) }}" style="text-decoration:none; color:black;"><span>Manage Ads</span></a>
   </div>
   <div class="win95-body" style="padding: 4px;">
     <div class="feed-container" id="feed-container">
@@ -74,7 +75,42 @@ function timeAgo(isoString) {
   return days + 'd ago';
 }
 
+function renderAdCard(ad) {
+  if (ad.ad_type === 'network') {
+    return `
+      <div class="feed-card ad-card" data-ad-id="${ad.id}">
+        <div class="ad-label">Ad</div>
+        <div class="feed-card-text ad-network-slot">
+          ${ad.network_slot_html}
+        </div>
+      </div>
+    `;
+  }
+
+  let mediaHtml = '';
+  if (ad.media_path) {
+    mediaHtml = `<div class="feed-card-media"><img src="${ad.media_path}" alt="ad image"></div>`;
+  }
+
+  const linkAttrs = ad.link_url ? `onclick="window.open('${escapeHtml(ad.link_url)}', '_blank')" style="cursor:pointer;"` : '';
+
+  return `
+    <div class="feed-card ad-card" data-ad-id="${ad.id}" ${linkAttrs}>
+      <div class="feed-card-header">
+        <span class="ad-label">Sponsored${ad.sponsor_name ? ' &middot; ' + escapeHtml(ad.sponsor_name) : ''}</span>
+      </div>
+      ${mediaHtml}
+      <div class="feed-card-text">
+        ${ad.title ? `<div class="post-title">${escapeHtml(ad.title)}</div>` : ''}
+        ${ad.body ? `<div class="post-body">${escapeHtml(ad.body)}</div>` : ''}
+      </div>
+    </div>
+  `;
+}
+
 function renderPostCard(post) {
+  if (post.is_ad) return renderAdCard(post);
+
   let mediaHtml = '';
   if (post.post_type === 'image' && post.media_path) {
     mediaHtml = `<div class="feed-card-media"><img src="${post.media_path}" alt="post image"></div>`;

@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}New Ad - Win95Social{% endblock %}
+{% block content %}
+<div class="win95-window" style="max-width: 480px;">
+  <div class="win95-titlebar">
+    <div class="title-left">
+      <span class="title-icon"></span>
+      <span>New Ad in {{ community['name'] }}</span>
+    </div>
+    <div class="win95-titlebar-btns">
+      <button disabled>_</button>
+      <button disabled>&#9633;</button>
+      <button onclick="window.location.href='{{ url_for('manage_ads', community_id=community['id']) }}'">X</button>
+    </div>
+  </div>
+  <div class="win95-body">
+    <p class="text-sm">Active ads in this community: <span class="text-bold">{{ active_count }} / 3</span></p>
+    <hr class="win95">
+
+    <div class="post-type-tabs">
+      <div class="tab95 active" data-type="custom">Custom Ad</div>
+      <div class="tab95" data-type="network">Ad Network Code</div>
+    </div>
+
+    <form method="POST" action="{{ url_for('new_ad', community_id=community['id']) }}" enctype="multipart/form-data">
+      <input type="hidden" name="ad_type" id="ad_type" value="custom">
+
+      <div id="custom-fields">
+        <div class="field">
+          <label for="sponsor_name">Sponsor name (optional)</label>
+          <input type="text" id="sponsor_name" name="sponsor_name" maxlength="50" placeholder="e.g. Your Company">
+        </div>
+        <div class="field">
+          <label for="title">Headline</label>
+          <input type="text" id="title" name="title" maxlength="100" placeholder="Ad headline">
+        </div>
+        <div class="field">
+          <label for="body">Body text</label>
+          <textarea id="body" name="body" rows="3" placeholder="Short ad copy..."></textarea>
+        </div>
+        <div class="field">
+          <label for="media">Image (optional)</label>
+          <input type="file" id="media" name="media" accept="image/*">
+        </div>
+        <div class="field">
+          <label for="link_url">Link URL (optional)</label>
+          <input type="text" id="link_url" name="link_url" maxlength="300" placeholder="https://...">
+        </div>
+      </div>
+
+      <div id="network-fields" style="display:none;">
+        <div class="field">
+          <label for="network_slot_html">Ad network embed code</label>
+          <textarea id="network_slot_html" name="network_slot_html" rows="6" placeholder="Paste your AdSense (or similar) embed snippet here"></textarea>
+        </div>
+        <p class="text-sm">This will render in its own clearly labeled "Ad" slot, as most ad networks require — it won't be disguised as a normal post.</p>
+      </div>
+
+      {% if error %}
+        <div class="error-text">{{ error }}</div>
+      {% endif %}
+
+      <div class="mt-12 flex-row" style="justify-content: flex-end;">
+        <a href="{{ url_for('manage_ads', community_id=community['id']) }}" class="btn95">Cancel</a>
+        <button type="submit" class="btn95 primary" {% if active_count >= 3 %}disabled{% endif %}>Create Ad</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const tabs = document.querySelectorAll('.tab95');
+const adTypeInput = document.getElementById('ad_type');
+const customFields = document.getElementById('custom-fields');
+const networkFields = document.getElementById('network-fields');
+
+tabs.forEach(tab => {
+  tab.addEventListener('click', () => {
+    const type = tab.dataset.type;
+    adTypeInput.value = type;
+    tabs.forEach(t => t.classList.toggle('active', t.dataset.type === type));
+    customFields.style.display = type === 'custom' ? 'block' : 'none';
+    networkFields.style.display = type === 'network' ? 'block' : 'none';
+  });
+});
+</script>
+{% endblock %}

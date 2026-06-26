@@ -159,6 +159,21 @@ def init_db():
             UNIQUE(follower_id, followed_id)
         )
     """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS ads (
+            id SERIAL PRIMARY KEY,
+            community_id INTEGER NOT NULL REFERENCES communities (id),
+            ad_type TEXT NOT NULL DEFAULT 'custom',
+            title TEXT DEFAULT '',
+            body TEXT DEFAULT '',
+            media_path TEXT DEFAULT '',
+            link_url TEXT DEFAULT '',
+            sponsor_name TEXT DEFAULT '',
+            network_slot_html TEXT DEFAULT '',
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TEXT NOT NULL
+        )
+    """)
     db.commit()
 
     cur.execute("SELECT COUNT(*) as c FROM communities")
@@ -364,6 +379,32 @@ def api_posts(community_id):
         p["liked_by_me"] = bool(p["liked_by_me"])
         p["like_count"] = int(p["like_count"])
         p["comment_count"] = int(p["comment_count"])
+        p["is_ad"] = False
+
+    cur.execute("SELECT * FROM ads WHERE community_id = %s AND is_active = TRUE ORDER BY id ASC LIMIT 3",
+                (community_id,))
+    ads = [dict(r) for r in cur.fetchall()]
+    for a in ads:
+        a["is_ad"] = True
+
+    # Sprinkle ads evenly through the feed rather than clustering them at the top
+    if ads and posts:
+        merged = []
+        spacing = max(len(posts) // (len(ads) + 1), 1)
+        ad_idx = 0
+        for i, post in enumerate(posts):
+            merged.append(post)
+            if ad_idx < len(ads) and (i + 1) % spacing == 0:
+                merged.append(ads[ad_idx])
+                ad_idx += 1
+        # Any leftover ads (e.g. short feed) get appended at the end
+        while ad_idx < len(ads):
+            merged.append(ads[ad_idx])
+            ad_idx += 1
+        return jsonify(merged)
+    elif ads and not posts:
+        return jsonify(ads)
+
     return jsonify(posts)
 
 
@@ -834,6 +875,123 @@ def api_search():
     posts_result = [dict(r) for r in cur.fetchall()]
 
     return jsonify({"communities": communities_result, "posts": posts_result})
+
+
+# ---------- Routes: Ads ----------
+
+@app.route("/ads/new/<int:community_id>", methods=["GET", "POST"])
+def new_ad(community_id):
+    redir = login_required_redirect()
+    if redir:
+        return redir
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("SELECT * FROM communities WHERE id = %s", (community_id,))
+    community = cur.fetchone()
+    if community is None:
+        return redirect(url_for("communities"))
+
+    cur.execute("SELECT COUNT(*) as c FROM ads WHERE community_id = %s AND is_active = TRUE", (community_id,))
+    active_count = cur.fetchone()["c"]
+
+    if request.method == "POST":
+        if active_count >= 3:
+            return render_template("new_ad.html", community=community, user=current_user(),
+                                    active_count=active_count, error="This community already has 3 active ads (the max). Deactivate one first.")
+
+        ad_type = request.form.get("ad_type", "custom")
+        title = request.form.get("title", "").strip()
+        body = request.form.get("body", "").strip()
+        link_url = request.form.get("link_url", "").strip()
+        sponsor_name = request.form.get("sponsor_name", "").strip()
+        network_slot_html = request.form.get("network_slot_html", "").strip()
+        media_path = ""
+
+        if ad_type == "custom":
+            if not title:
+                return render_template("new_ad.html", community=community, user=current_user(),
+                                        active_count=active_count, error="Custom ads need a title.")
+            file = request.files.get("media")
+            if file and file.filename:
+                if allowed_file(file.filename, ALLOWED_IMAGE):
+                    try:
+                        upload_result = cloudinary.uploader.upload(
+                            file, resource_type="image", public_id=f"win95social-ads/{uuid.uuid4().hex}",
+                        )
+                        media_path = upload_result["secure_url"]
+                    except Exception as e:
+                        return render_template("new_ad.html", community=community, user=current_user(),
+                                                active_count=active_count, error=f"Upload failed: {e}")
+                else:
+                    return render_template("new_ad.html", community=community, user=current_user(),
+                                            active_count=active_count, error="That image type isn't allowed.")
+        elif ad_type == "network":
+            if not network_slot_html:
+                return render_template("new_ad.html", community=community, user=current_user(),
+                                        active_count=active_count, error="Paste your ad network's embed code.")
+        else:
+            return render_template("new_ad.html", community=community, user=current_user(),
+                                    active_count=active_count, error="Unknown ad type.")
+
+        cur.execute("""
+            INSERT INTO ads (community_id, ad_type, title, body, media_path, link_url, sponsor_name, network_slot_html, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (community_id, ad_type, title, body, media_path, link_url, sponsor_name, network_slot_html, now_iso()))
+        db.commit()
+        return redirect(url_for("manage_ads", community_id=community_id))
+
+    return render_template("new_ad.html", community=community, user=current_user(),
+                            active_count=active_count, error=None)
+
+
+@app.route("/ads/manage/<int:community_id>")
+def manage_ads(community_id):
+    redir = login_required_redirect()
+    if redir:
+        return redir
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("SELECT * FROM communities WHERE id = %s", (community_id,))
+    community = cur.fetchone()
+    if community is None:
+        return redirect(url_for("communities"))
+    cur.execute("SELECT * FROM ads WHERE community_id = %s ORDER BY created_at DESC", (community_id,))
+    ads = cur.fetchall()
+    return render_template("manage_ads.html", community=community, ads=ads, user=current_user())
+
+
+@app.route("/ads/<int:ad_id>/toggle", methods=["POST"])
+def toggle_ad(ad_id):
+    if "user_id" not in session:
+        return jsonify({"error": "not logged in"}), 401
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("SELECT * FROM ads WHERE id = %s", (ad_id,))
+    ad = cur.fetchone()
+    if ad is None:
+        return jsonify({"error": "ad not found"}), 404
+
+    new_state = not ad["is_active"]
+    if new_state:
+        cur.execute("SELECT COUNT(*) as c FROM ads WHERE community_id = %s AND is_active = TRUE", (ad["community_id"],))
+        active_count = cur.fetchone()["c"]
+        if active_count >= 3:
+            return jsonify({"error": "Max 3 active ads per community"}), 400
+
+    cur.execute("UPDATE ads SET is_active = %s WHERE id = %s", (new_state, ad_id))
+    db.commit()
+    return jsonify({"ok": True, "is_active": new_state})
+
+
+@app.route("/ads/<int:ad_id>/delete", methods=["POST"])
+def delete_ad(ad_id):
+    if "user_id" not in session:
+        return jsonify({"error": "not logged in"}), 401
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("DELETE FROM ads WHERE id = %s", (ad_id,))
+    db.commit()
+    return jsonify({"ok": True})
 
 
 # Initialize DB tables on startup (safe to call every boot, uses IF NOT EXISTS)

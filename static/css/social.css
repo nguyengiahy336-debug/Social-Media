@@ -154,6 +154,31 @@
   padding: 40px 20px;
 }
 
+/* ---------- Ad cards in feed ---------- */
+.ad-card {
+  border: 2px dashed var(--win-gray-darker) !important;
+  background: #f5f0e0;
+}
+
+.ad-label {
+  font-size: 10px;
+  font-weight: bold;
+  color: var(--win-gray-darker);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 4px 8px;
+  background: #e8dfc0;
+  border-bottom: 1px solid var(--win-gray-dark);
+}
+
+.ad-network-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  background: var(--win-white);
+}
+
 /* ---------- Comments popup window ---------- */
 .comments-overlay {
   position: fixed;
