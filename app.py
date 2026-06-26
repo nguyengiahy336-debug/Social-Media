@@ -220,6 +220,13 @@ def login_required_redirect():
     return None
 
 
+def is_admin(user):
+    if user is None:
+        return False
+    admin_username = os.environ.get("ADMIN_USERNAME", "")
+    return admin_username != "" and user["username"] == admin_username
+
+
 def allowed_file(filename, allowed_set):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in allowed_set
 
@@ -357,7 +364,8 @@ def feed(community_id):
     community = cur.fetchone()
     if community is None:
         return redirect(url_for("communities"))
-    return render_template("feed.html", community=community, user=current_user())
+    me = current_user()
+    return render_template("feed.html", community=community, user=me, is_admin_user=is_admin(me))
 
 
 @app.route("/api/posts/<int:community_id>")
@@ -893,6 +901,8 @@ def new_ad(community_id):
     redir = login_required_redirect()
     if redir:
         return redir
+    if not is_admin(current_user()):
+        return redirect(url_for("communities"))
     db = get_db()
     cur = db.cursor()
     cur.execute("SELECT * FROM communities WHERE id = %s", (community_id,))
@@ -974,6 +984,8 @@ def manage_ads(community_id):
     redir = login_required_redirect()
     if redir:
         return redir
+    if not is_admin(current_user()):
+        return redirect(url_for("communities"))
     db = get_db()
     cur = db.cursor()
     cur.execute("SELECT * FROM communities WHERE id = %s", (community_id,))
@@ -989,6 +1001,8 @@ def manage_ads(community_id):
 def toggle_ad(ad_id):
     if "user_id" not in session:
         return jsonify({"error": "not logged in"}), 401
+    if not is_admin(current_user()):
+        return jsonify({"error": "not authorized"}), 403
     db = get_db()
     cur = db.cursor()
     cur.execute("SELECT * FROM ads WHERE id = %s", (ad_id,))
@@ -1015,6 +1029,8 @@ def toggle_ad(ad_id):
 def delete_ad(ad_id):
     if "user_id" not in session:
         return jsonify({"error": "not logged in"}), 401
+    if not is_admin(current_user()):
+        return jsonify({"error": "not authorized"}), 403
     db = get_db()
     cur = db.cursor()
     cur.execute("DELETE FROM ads WHERE id = %s", (ad_id,))

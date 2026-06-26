@@ -16,7 +16,9 @@
   <div class="win95-menubar">
     <a href="{{ url_for('communities') }}" style="text-decoration:none; color:black;"><span>&larr; Back to Communities</span></a>
     <a href="{{ url_for('new_post', community_id=community['id']) }}" style="text-decoration:none; color:black;"><span>+ New Post</span></a>
+    {% if is_admin_user %}
     <a href="{{ url_for('manage_ads', community_id=community['id']) }}" style="text-decoration:none; color:black;"><span>Manage Ads</span></a>
+    {% endif %}
   </div>
   <div class="win95-body" style="padding: 4px;">
     <div class="feed-container" id="feed-container">
